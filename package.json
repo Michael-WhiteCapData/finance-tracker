@@ -1,0 +1,36 @@
+{
+  "name": "finance-tracker",
+  "version": "1.0.0",
+  "description": "A self-hosted, local-first personal finance tracker. Subscriptions, income, spending, budgets, alerts, and overdraft forecasting — with optional real-time bank sync via SimpleFIN. Zero npm dependencies.",
+  "type": "commonjs",
+  "license": "MIT",
+  "author": "Michael Tierney",
+  "homepage": "https://github.com/Michael-WhiteCapData/finance-tracker#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Michael-WhiteCapData/finance-tracker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Michael-WhiteCapData/finance-tracker/issues"
+  },
+  "keywords": [
+    "finance",
+    "personal-finance",
+    "budget",
+    "self-hosted",
+    "local-first",
+    "sqlite",
+    "simplefin",
+    "zero-dependency",
+    "privacy"
+  ],
+  "scripts": {
+    "start": "node --experimental-sqlite server.js",
+    "dev": "node --experimental-sqlite --watch server.js",
+    "demo": "node --experimental-sqlite scripts/demo.js",
+    "test": "node --experimental-sqlite --test"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

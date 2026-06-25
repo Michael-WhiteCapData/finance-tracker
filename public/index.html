@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finance Tracker</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <meta name="theme-color" content="#12161f" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Finance" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">◆</span>
+        <span class="brand-name">Finance</span>
+      </div>
+      <nav class="tabs" id="tabs">
+        <button class="tab is-active" data-tab="month">This Month</button>
+        <button class="tab" data-tab="upcoming">Upcoming</button>
+        <button class="tab" data-tab="subscriptions">Subscriptions</button>
+        <button class="tab" data-tab="income">Income</button>
+        <button class="tab" data-tab="spending">Spending</button>
+        <button class="tab" data-tab="insights">Insights</button>
+        <button class="tab" data-tab="profit">Profit</button>
+      </nav>
+      <button class="btn btn-ghost refresh-btn" id="connectBtn" title="Connect a bank for live data">🔗 Connect bank</button>
+      <button class="btn btn-ghost refresh-btn" id="refreshBtn" title="Re-import all data">⟳ Refresh</button>
+      <button class="icon-btn theme-btn" id="settingsBtn" title="Settings" aria-label="Settings">⚙</button>
+      <button class="icon-btn theme-btn" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">☾</button>
+    </header>
+
+    <main class="content">
+      <!-- ALERTS — unified, severity-ranked feed; visible on every tab -->
+      <div class="alerts-bar" id="alertsBar" hidden></div>
+      <!-- THIS MONTH -->
+      <section class="panel is-active" data-panel="month">
+        <div class="panel-head">
+          <div>
+            <h1 id="monthTitle">This Month</h1>
+            <p class="subtitle" id="monthSubtitle">Where you stand this month.</p>
+          </div>
+          <span class="month-progress" id="monthProgress"></span>
+        </div>
+        <div class="balances-strip" id="monthBalances" hidden></div>
+        <div class="metrics" id="monthMetrics"></div>
+        <div class="spend-grid">
+          <div class="spend-col">
+            <h3 class="spend-h">Spending by category</h3>
+            <div id="monthCategories"></div>
+          </div>
+          <div class="spend-col">
+            <h3 class="spend-h">Income this month</h3>
+            <div id="monthIncome"></div>
+            <h3 class="spend-h" style="margin-top:22px;">Pace</h3>
+            <div id="monthPace"></div>
+          </div>
+        </div>
+        <div class="list-card" style="margin-top:20px;">
+          <div class="list-head spend-head">
+            <span class="col">Date</span>
+            <span class="col">Merchant</span>
+            <span class="col">Category</span>
+            <span class="col">Source</span>
+            <span class="col" style="text-align:right;">Amount</span>
+          </div>
+          <div id="monthList"></div>
+        </div>
+      </section>
+
+      <!-- UPCOMING -->
+      <section class="panel" data-panel="upcoming">
+        <div class="panel-head">
+          <div>
+            <h1>Upcoming</h1>
+            <p class="subtitle" id="upSubtitle">What's about to hit, and whether your pay covers it.</p>
+          </div>
+        </div>
+        <div class="balances-strip" id="upBalances" hidden></div>
+        <div class="metrics" id="upMetrics"></div>
+        <div class="spend-col" style="margin:4px 0 20px;">
+          <h3 class="spend-h">Cashflow calendar</h3>
+          <div id="upCalendar"></div>
+        </div>
+        <div class="list-card" style="margin-top:4px;">
+          <div class="list-head up-head">
+            <span class="col">When</span>
+            <span class="col">Item</span>
+            <span class="col" style="text-align:right;">Amount</span>
+            <span class="col" style="text-align:right;">Running</span>
+          </div>
+          <div id="upTimeline"></div>
+        </div>
+        <p class="spend-method" id="upNote"></p>
+      </section>
+
+      <!-- SUBSCRIPTIONS -->
+      <section class="panel" data-panel="subscriptions">
+        <div class="panel-head">
+          <div>
+            <h1>Subscriptions</h1>
+            <p class="subtitle" id="subsSubtitle">Everything you're paying for, normalized to one view.</p>
+          </div>
+          <button class="btn btn-primary" id="addBtn">+ Add subscription</button>
+        </div>
+
+        <div id="subSuggest"><!-- detected recurring charges injected --></div>
+
+        <div class="metrics" id="metrics"><!-- metric cards injected --></div>
+
+        <div class="breakdown" id="breakdown"><!-- category bars injected --></div>
+
+        <div class="list-card">
+          <div class="list-head">
+            <span class="col col-name">Name</span>
+            <span class="col col-cat">Category</span>
+            <span class="col col-cycle">Billing</span>
+            <span class="col col-next">Next charge</span>
+            <span class="col col-cost">Cost</span>
+            <span class="col col-month">/ month</span>
+            <span class="col col-actions"></span>
+          </div>
+          <div id="subList"><!-- rows injected --></div>
+        </div>
+      </section>
+
+      <!-- INCOME -->
+      <section class="panel" data-panel="income">
+        <div class="panel-head">
+          <div>
+            <h1>Income</h1>
+            <p class="subtitle" id="incSubtitle">What's coming in, normalized to one view.</p>
+          </div>
+          <button class="btn btn-primary" id="incAddBtn">+ Add income</button>
+        </div>
+
+        <div class="metrics" id="incMetrics"></div>
+        <div class="breakdown" id="incBreakdown"></div>
+
+        <div class="list-card">
+          <div class="list-head">
+            <span class="col col-next">Date</span>
+            <span class="col col-name">Source</span>
+            <span class="col col-cat">Type</span>
+            <span class="col col-cost">Amount</span>
+            <span class="col col-month">Running YTD</span>
+            <span class="col col-actions"></span>
+          </div>
+          <div id="incList"></div>
+        </div>
+      </section>
+
+      <!-- SPENDING -->
+      <section class="panel" data-panel="spending">
+        <div class="panel-head">
+          <div>
+            <h1>Spending</h1>
+            <p class="subtitle" id="spendSubtitle">Where your money actually goes — across every account.</p>
+          </div>
+        </div>
+
+        <div class="metrics" id="spendMetrics"></div>
+
+        <div class="spend-grid">
+          <div class="spend-col">
+            <h3 class="spend-h">By category</h3>
+            <div id="spendCategories"></div>
+          </div>
+          <div class="spend-col">
+            <h3 class="spend-h">Monthly trend</h3>
+            <div id="spendTrend"></div>
+            <h3 class="spend-h" style="margin-top:22px;">Top merchants</h3>
+            <div id="spendMerchants"></div>
+          </div>
+        </div>
+
+        <div class="filter-bar" id="spendFilters">
+          <input type="search" id="fltSearch" class="flt-search" placeholder="Search merchant or description…" />
+          <select id="fltCategory" class="flt-sel"><option value="">All categories</option></select>
+          <input type="date" id="fltFrom" class="flt-date" title="From" />
+          <input type="date" id="fltTo" class="flt-date" title="To" />
+          <button class="btn btn-ghost flt-clear" id="fltClear">Clear</button>
+        </div>
+        <div class="list-card" style="margin-top:14px;">
+          <div class="list-head spend-head">
+            <span class="col">Date</span>
+            <span class="col">Merchant</span>
+            <span class="col">Category</span>
+            <span class="col">Source</span>
+            <span class="col" style="text-align:right;">Amount</span>
+          </div>
+          <div id="spendList"></div>
+        </div>
+        <p class="spend-method" id="spendMethod"></p>
+      </section>
+
+      <!-- INSIGHTS -->
+      <section class="panel" data-panel="insights">
+        <div class="panel-head">
+          <div>
+            <h1>Insights</h1>
+            <p class="subtitle">Patterns, leaks, and where the money really moves.</p>
+          </div>
+        </div>
+        <div class="networth-card" id="netWorth"></div>
+        <div id="insightLeaks" class="insight-leaks"></div>
+        <div class="spend-grid">
+          <div class="spend-col">
+            <h3 class="spend-h">Who gets your P2P money</h3>
+            <div id="insightP2P"></div>
+          </div>
+          <div class="spend-col">
+            <h3 class="spend-h">This month vs last</h3>
+            <div id="insightMoM"></div>
+          </div>
+        </div>
+        <div class="spend-col" style="margin-top:20px;">
+          <h3 class="spend-h">Biggest transactions</h3>
+          <div id="insightBiggest"></div>
+        </div>
+
+        <div class="spend-col" style="margin-top:20px;">
+          <div class="goals-head"><h3 class="spend-h" style="margin:0;">Savings goals</h3>
+            <button class="btn btn-ghost" id="addGoalBtn">+ Add goal</button></div>
+          <div id="goalsList"></div>
+          <form id="goalForm" class="goal-form" hidden>
+            <input id="goalName" type="text" placeholder="e.g. Emergency fund" />
+            <input id="goalTarget" type="number" min="1" step="100" placeholder="Target $" />
+            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="button" class="btn btn-ghost" id="goalCancel">Cancel</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- PROFIT -->
+      <section class="panel" data-panel="profit">
+        <div class="panel-head">
+          <div>
+            <h1>Profit</h1>
+            <p class="subtitle" id="profitSubtitle">Income minus everything going out.</p>
+          </div>
+        </div>
+        <div class="metrics" id="profitMetrics"></div>
+        <div class="profit-flow" id="profitFlow"></div>
+        <div class="spend-col" style="margin-top:20px;">
+          <h3 class="spend-h">Income vs spending</h3>
+          <div id="profitTrend"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Add / Edit modal -->
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-head">
+        <h2 id="modalTitle">Add subscription</h2>
+        <button class="icon-btn" id="modalClose" aria-label="Close">✕</button>
+      </div>
+      <form id="subForm" class="form">
+        <input type="hidden" id="f-id" />
+        <div class="field">
+          <label for="f-name">Name</label>
+          <input id="f-name" type="text" required maxlength="120" placeholder="Netflix, ChatGPT, Adobe…" autocomplete="off" />
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="f-cost">Cost (USD)</label>
+            <input id="f-cost" type="number" min="0" step="0.01" required placeholder="0.00" />
+          </div>
+          <div class="field">
+            <label for="f-cycle">Billing cycle</label>
+            <select id="f-cycle">
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Every 2 weeks</option>
+              <option value="monthly" selected>Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="semiannual">Every 6 months</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="f-category">Category</label>
+            <input id="f-category" type="text" list="categoryList" placeholder="Streaming" autocomplete="off" />
+            <datalist id="categoryList">
+              <option value="Streaming"></option>
+              <option value="Music"></option>
+              <option value="Software / SaaS"></option>
+              <option value="AI / LLM"></option>
+              <option value="Cloud / Hosting"></option>
+              <option value="News / Media"></option>
+              <option value="Fitness / Health"></option>
+              <option value="Gaming"></option>
+              <option value="Utilities"></option>
+              <option value="Finance"></option>
+              <option value="Other"></option>
+            </datalist>
+          </div>
+          <div class="field">
+            <label for="f-next">Next charge</label>
+            <input id="f-next" type="date" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-status">Status</label>
+          <select id="f-status">
+            <option value="active" selected>Active</option>
+            <option value="paused">Paused</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-notes">Notes <span class="opt">(optional)</span></label>
+          <input id="f-notes" type="text" maxlength="500" placeholder="Plan tier, who shares it, renewal reminders…" autocomplete="off" />
+        </div>
+        <p class="form-error" id="formError" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="deleteBtn" hidden>Delete</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-ghost" id="cancelBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="saveBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add / Edit income modal -->
+  <div class="modal-backdrop" id="incModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="incModalTitle">
+      <div class="modal-head">
+        <h2 id="incModalTitle">Add income</h2>
+        <button class="icon-btn" id="incModalClose" aria-label="Close">✕</button>
+      </div>
+      <form id="incForm" class="form">
+        <input type="hidden" id="if-id" />
+        <div class="field">
+          <label for="if-name">Source</label>
+          <input id="if-name" type="text" required maxlength="120" placeholder="Payroll, client invoice, side gig…" autocomplete="off" />
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="if-cost">Amount (USD)</label>
+            <input id="if-cost" type="number" min="0" step="0.01" required placeholder="0.00" />
+          </div>
+          <div class="field">
+            <label for="if-cycle">Frequency</label>
+            <select id="if-cycle">
+              <option value="weekly" selected>Weekly</option>
+              <option value="biweekly">Every 2 weeks</option>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="semiannual">Every 6 months</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="if-category">Type</label>
+            <input id="if-category" type="text" list="incCategoryList" placeholder="Salary" autocomplete="off" />
+            <datalist id="incCategoryList">
+              <option value="Salary / Payroll"></option>
+              <option value="Client / Invoice"></option>
+              <option value="Side income"></option>
+              <option value="Interest"></option>
+              <option value="Dividends"></option>
+              <option value="Rental"></option>
+              <option value="Reimbursement"></option>
+              <option value="Other"></option>
+            </datalist>
+          </div>
+          <div class="field">
+            <label for="if-next">Date received</label>
+            <input id="if-next" type="date" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="if-status">Status</label>
+          <select id="if-status">
+            <option value="active" selected>Active</option>
+            <option value="paused">Paused</option>
+            <option value="ended">Ended</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="if-notes">Notes <span class="opt">(optional)</span></label>
+          <input id="if-notes" type="text" maxlength="500" placeholder="Employer, account it lands in, variability…" autocomplete="off" />
+        </div>
+        <p class="form-error" id="incFormError" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="incDeleteBtn" hidden>Delete</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-ghost" id="incCancelBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="incSaveBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Category picker (recategorize a transaction) -->
+  <div class="modal-backdrop" id="catModal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="catModalTitle">Recategorize</h2>
+        <button class="icon-btn" id="catModalClose" aria-label="Close">✕</button>
+      </div>
+      <p class="cat-modal-sub" id="catModalSub"></p>
+      <div class="cat-picker" id="catPicker"></div>
+    </div>
+  </div>
+
+  <!-- Budget editor -->
+  <div class="modal-backdrop" id="budgetModal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="budgetModalTitle">Set budget</h2>
+        <button class="icon-btn" id="budgetModalClose" aria-label="Close">✕</button>
+      </div>
+      <form id="budgetForm" class="form">
+        <input type="hidden" id="b-category" />
+        <div class="field">
+          <label for="b-limit">Monthly limit (USD) <span class="opt">— 0 to remove</span></label>
+          <input id="b-limit" type="number" min="0" step="1" placeholder="0.00" />
+        </div>
+        <div class="modal-actions">
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-ghost" id="budgetCancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- SimpleFIN connect -->
+  <div class="modal-backdrop" id="sfModal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="sfTitle">Connect live bank data</h2>
+        <button class="icon-btn" id="sfClose" aria-label="Close">✕</button>
+      </div>
+      <div id="sfBody">
+        <ol class="sf-steps">
+          <li>Sign up at <a href="https://bridge.simplefin.org" target="_blank" rel="noreferrer">bridge.simplefin.org</a> and connect your accounts (incl. the credit card).</li>
+          <li>Generate a <b>Setup Token</b> and paste it below.</li>
+        </ol>
+        <div class="field">
+          <label for="sf-token">Setup Token</label>
+          <textarea id="sf-token" rows="3" placeholder="aHR0cHM6Ly9icmlkZ2Uuc2ltcGxlZmluLm9yZy8..." autocomplete="off"></textarea>
+        </div>
+        <p class="form-error" id="sfError" hidden></p>
+        <div class="modal-actions">
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-ghost" id="sfCancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="sfConnect">Connect &amp; sync</button>
+        </div>
+      </div>
+      <div id="sfStatus" class="sf-status" hidden></div>
+      <div class="sf-actions" id="sfConnectedActions" hidden>
+        <button type="button" class="btn btn-ghost danger" id="sfDisconnect">Disconnect bank</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- First-run onboarding -->
+  <div class="onboard" id="onboard" hidden>
+    <div class="onboard-card">
+      <div class="onboard-mark">◆</div>
+      <h1>Welcome to your Finance Tracker</h1>
+      <p class="onboard-sub">See every account, subscription, and dollar in one private dashboard. Your data stays on your machine.</p>
+      <div class="onboard-steps">
+        <button class="onboard-opt primary" id="onboardConnect">
+          <span class="oo-icon">🔗</span>
+          <span class="oo-title">Connect your bank</span>
+          <span class="oo-desc">Live balances &amp; transactions via SimpleFIN — <b>~$15/year</b>, paid to SimpleFIN (not us). The fastest start.</span>
+        </button>
+        <button class="onboard-opt" id="onboardImport">
+          <span class="oo-icon">📄</span>
+          <span class="oo-title">Import statements</span>
+          <span class="oo-desc">Drop bank / PayPal / Venmo / Cash App CSV exports into the <code>import/</code> folder and refresh. Free, manual.</span>
+        </button>
+      </div>
+      <button class="linklike onboard-skip" id="onboardSkip">Skip for now — explore the empty dashboard</button>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="modal-backdrop" id="settingsModal" hidden>
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h2>Settings</h2>
+        <button class="icon-btn" id="settingsClose" aria-label="Close">✕</button>
+      </div>
+
+      <section class="set-section">
+        <h3 class="set-h">Bank connection</h3>
+        <div id="setConnection" class="set-conn"></div>
+      </section>
+
+      <section class="set-section">
+        <h3 class="set-h">Budgets</h3>
+        <p class="set-note">Monthly spending limits per category. Set to 0 to remove.</p>
+        <div id="setBudgets" class="set-budgets"></div>
+        <div class="set-budget-add">
+          <input id="setBudgetCat" type="text" list="categoryList" placeholder="Category" />
+          <input id="setBudgetAmt" type="number" min="0" step="1" placeholder="$ / month" />
+          <button class="btn btn-ghost" id="setBudgetAddBtn">Add</button>
+        </div>
+      </section>
+
+      <section class="set-section">
+        <h3 class="set-h">Manual accounts</h3>
+        <p class="set-note">Add accounts the bank feed can't reach (investments, 401k, cash, a credit card you didn't connect) so your net worth is complete.</p>
+        <div id="setAccounts" class="set-accounts"></div>
+        <div class="set-account-add">
+          <input id="acctName" type="text" placeholder="Account name" />
+          <select id="acctType">
+            <option value="investment">Investment</option>
+            <option value="retirement">Retirement / 401k</option>
+            <option value="cash">Cash</option>
+            <option value="savings">Savings</option>
+            <option value="checking">Checking</option>
+            <option value="creditcard">Credit card (debt)</option>
+            <option value="loan">Loan (debt)</option>
+            <option value="other">Other</option>
+          </select>
+          <input id="acctBalance" type="number" step="0.01" placeholder="Balance $" />
+          <button class="btn btn-ghost" id="acctAddBtn">Add</button>
+        </div>
+      </section>
+
+      <section class="set-section">
+        <h3 class="set-h">Data</h3>
+        <p class="set-note">Export your data or back up the whole database. Everything stays local.</p>
+        <div class="set-data-actions">
+          <a class="btn btn-ghost" href="/api/export?format=csv" download>Export CSV</a>
+          <a class="btn btn-ghost" href="/api/export?format=json" download>Export JSON</a>
+          <a class="btn btn-ghost" href="/api/backup" download>Back up database</a>
+        </div>
+      </section>
+
+      <section class="set-section">
+        <h3 class="set-h">Profile <span class="set-adv">advanced</span></h3>
+        <p class="set-note">Used to classify your accounts and spot transfers to yourself. Personal — stored only in your local database.</p>
+        <form id="profileForm" class="form">
+          <div class="field">
+            <label for="p-names">Your name(s) &amp; handles <span class="opt">comma-separated</span></label>
+            <input id="p-names" type="text" placeholder="jane doe, janedoe88" autocomplete="off" />
+            <span class="field-hint">Lets it ignore payments to yourself (loading your own Cash App / Venmo).</span>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="p-checking">Checking match</label>
+              <input id="p-checking" type="text" placeholder="check|chk" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="p-savings">Savings match</label>
+              <input id="p-savings" type="text" placeholder="sav" autocomplete="off" />
+            </div>
+          </div>
+          <span class="field-hint">Regex matched against account names/filenames. Defaults work for most banks; override if yours uses cryptic labels.</span>
+          <div class="modal-actions">
+            <span class="spacer"></span>
+            <button type="submit" class="btn btn-primary">Save profile</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </div>
+
+  <!-- Drill-down -->
+  <div class="modal-backdrop" id="drillModal" hidden>
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h2 id="drillTitle">Detail</h2>
+        <button class="icon-btn" id="drillClose" aria-label="Close">✕</button>
+      </div>
+      <div id="drillBody"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <!-- Controller, split for maintainability. Plain classic scripts: load order
+       matters (shared global scope), and all immediate wiring lives in app-boot.js,
+       which must load last. -->
+  <script src="/app-core.js"></script>
+  <script src="/app-views.js"></script>
+  <script src="/app-features.js"></script>
+  <script src="/app-extra.js"></script>
+  <script src="/app-boot.js"></script>
+</body>
+</html>

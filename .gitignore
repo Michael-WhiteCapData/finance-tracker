@@ -1,0 +1,32 @@
+# Local database (your financial data — never commit)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+finance.db
+
+# Imported statements + scan output — contains real transaction data, never commit
+import/
+
+# Secrets / env
+.env
+.env.*
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Server log artifact
+finance-server-win.log
+*.log
+
+# local visual-audit screenshots (contain real data)
+walk-*.png
+.playwright-mcp/
+
+# local demo-video build artifacts (screenshots, mp4, scripts)
+video/
