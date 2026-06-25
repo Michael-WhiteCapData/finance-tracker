@@ -30,7 +30,7 @@ function assertSafeUrl(raw, label) {
   try { u = new URL(raw); } catch { throw new Error(`${label} is not a valid URL`); }
   if (u.protocol !== 'https:') throw new Error(`${label} must use https`);
   const h = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (h === 'localhost' || /^(127\.|10\.|192\.168\.|169\.254\.|::1$|fc|fd|fe80)/.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h)) {
+  if (h === 'localhost' || /^(127\.|10\.|192\.168\.|169\.254\.|::1$|::ffff:7f|::ffff:127|fc|fd|fe80)/.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h)) {
     throw new Error(`${label} points to a private or local address`);
   }
   return u;
@@ -175,7 +175,7 @@ function balances() {
 function netWorth() {
   const today = localDay();
   // Ensure today's point exists from the current live balances.
-  const snap = db.prepare(`INSERT INTO balance_history (date, account, source, balance) VALUES (?, ?, ?, ?) ON CONFLICT(date, account) DO NOTHING`);
+  const snap = db.prepare(`INSERT INTO balance_history (date, account, source, balance) VALUES (?, ?, ?, ?) ON CONFLICT(date, account) DO UPDATE SET balance=excluded.balance`);
   for (const b of db.prepare('SELECT account, source, balance FROM balances').all()) snap.run(today, b.account, b.source, b.balance);
   const rows = db.prepare('SELECT date, ROUND(SUM(balance),2) net FROM balance_history GROUP BY date ORDER BY date').all();
   const b = balances();

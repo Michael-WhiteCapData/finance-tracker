@@ -30,3 +30,6 @@ walk-*.png
 
 # local demo-video build artifacts (screenshots, mp4, scripts)
 video/
+
+# Personal/local categorizer overrides (regional merchants)
+categorize.local.js

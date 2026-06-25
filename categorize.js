@@ -4,7 +4,7 @@
 // wins, so put specific buckets (subscriptions, gaming) before generic ones.
 // Each rule: [regex tested against the raw description, category].
 
-const RULES = [
+let RULES = [
   // Fees — the costly stuff, caught first
   [/paid item fee|overdraft|nsf|return item|insufficient/i, 'Fees & Charges'],
   [/service charge|maintenance fee|monthly fee|interest charge|finance charge/i, 'Fees & Charges'],
@@ -37,16 +37,16 @@ const RULES = [
   [/doordash|uber ?eats|grubhub|postmates|seamless/i, 'Food & Dining'],
   [/pizza|pizzeria|mcdonald|burger|taco|chipotle|wendy|subway|dunkin|starbucks|coffee|cafe|caf\b/i, 'Food & Dining'],
   [/restaurant|grill|diner|bar ?& ?grill|kitchen|bbq|deli|bagel|donut|wings|sushi|chinese|thai/i, 'Food & Dining'],
-  [/\btst\*|arby|sandwich|hideout bar|the linden|blue barn|five ?guys|panera|chick-?fil|popeyes|kfc/i, 'Food & Dining'],
-  [/tavern|\bpub\b|tap ?house|brewing|brewery|byrne ?dairy|stewart.?s|eatery|bistro|cantina|saloon/i, 'Food & Dining'],
-  [/liquor|wine ?& ?spirits|\bspirits\b|pedullas|beverage|smoke ?shop|smokes?\b/i, 'Food & Dining'],
+  [/\btst\*|arby|sandwich|five ?guys|panera|chick-?fil|popeyes|kfc/i, 'Food & Dining'],
+  [/tavern|\bpub\b|tap ?house|brewing|brewery|eatery|bistro|cantina|saloon/i, 'Food & Dining'],
+  [/liquor|wine ?& ?spirits|\bspirits\b|beverage|smoke ?shop|smokes?\b/i, 'Food & Dining'],
 
   // Groceries
-  [/wal-?\s?mart|walmart|wegmans|aldi|\btops\b|save ?a ?lot|grocery|supermarket|trader ?joe|kroger|costco|sam.?s club|dollar ?gen|dollar ?tree/i, 'Groceries'],
+  [/wal-?\s?mart|walmart|aldi|save ?a ?lot|grocery|supermarket|trader ?joe|kroger|costco|sam.?s club|dollar ?gen|dollar ?tree/i, 'Groceries'],
 
   // Gas & auto / convenience
-  [/\bgas\b|fuel|shell|sunoco|exxon|mobil|speedway|kwik ?fill|citgo|valero|bp ?#|chevron|marathon|circle ?k/i, 'Gas & Auto'],
-  [/fastrac|crosby|unico ?mart|\bmini ?mart|convenien|\bcitgo\b|\bsheetz\b|\bwawa\b/i, 'Gas & Auto'],
+  [/\bgas\b|fuel|shell|sunoco|exxon|mobil|speedway|citgo|valero|bp ?#|chevron|marathon|circle ?k/i, 'Gas & Auto'],
+  [/\bmini ?mart|convenien|\bcitgo\b|\bsheetz\b|\bwawa\b/i, 'Gas & Auto'],
   [/autozone|advance ?auto|o.?reilly|jiffy ?lube|car ?wash|mechanic|tire/i, 'Gas & Auto'],
 
   // Health
@@ -54,7 +54,7 @@ const RULES = [
 
   // Shopping
   [/amazon|amzn|\bebay\b|\btarget\b|best ?buy|aliexpress|temu|shein|etsy/i, 'Shopping'],
-  [/tractor ?supply|home ?depot|\blowe.?s\b|menards|hardware|\bafm glass\b/i, 'Shopping'],
+  [/tractor ?supply|home ?depot|\blowe.?s\b|menards|hardware/i, 'Shopping'],
 
   // Crypto / investment
   [/bitcoin|coinbase|crypto|\bbtc\b|kraken|binance|robinhood|kalshi/i, 'Crypto / Investment'],
@@ -74,6 +74,15 @@ const RULES = [
   // `\bzel\*` only matched the asterisk form, leaking the spaced form into Other.
   [/\bzel\b|zelle|quickpay|popmoney|apple ?cash|sent ?money|venmo|cash ?app|cashapp|\bp2p\b/i, 'P2P / People'],
 ];
+
+// Optional local override: drop a git-ignored `categorize.local.js` exporting
+// `{ rules: [[regex, 'Category'], ...] }` to teach the categorizer your own
+// regional/local merchants without committing them to a public repo. Local
+// rules are checked FIRST (they're the most specific to you).
+try {
+  const local = require('./categorize.local');
+  if (local && Array.isArray(local.rules)) RULES = [...local.rules, ...RULES];
+} catch { /* no local overrides present — that's fine */ }
 
 // Normalize a raw bank/platform description into a short merchant label.
 const NOISE = new Set([

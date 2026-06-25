@@ -20,6 +20,7 @@ const profile = require('./profile');
 const goals = require('./goals');
 const accounts = require('./accounts');
 const { DB_PATH } = require('./db');
+const { round2 } = require('./util');
 const transactions = require('./transactions');
 const importSpending = require('./scripts/import-spending');
 
@@ -62,7 +63,9 @@ function readBody(req) {
 }
 
 // Tiny in-memory rate limiter. Keyed per client+resource so one caller can't
-// exhaust another's allowance; empty buckets are dropped so the map can't grow.
+// exhaust another's allowance. The bucket holds only timestamps within the
+// window (older ones are filtered on each hit); at loopback scale the map holds
+// a key or two, so unbounded growth isn't a concern.
 const rlHits = new Map();
 function rateLimited(key, max = 10, windowMs = 60000) {
   const now = Date.now();
@@ -304,8 +307,7 @@ async function handleApi(req, res, url) {
       const inMonthly = income.monthlyTotal();
       const spendMonthly = spending.monthlyTotal();
       const subsMonthly = repo.summary().monthly;
-      const net = Math.round((inMonthly - spendMonthly) * 100) / 100;
-      const r2 = (n) => Math.round(n * 100) / 100;
+      const net = round2(inMonthly - spendMonthly);
       // Monthly trend: actual income vs spending per month.
       const incM = income.byMonth();
       const spendM = {};
@@ -313,13 +315,13 @@ async function handleApi(req, res, url) {
       const months = [...new Set([...Object.keys(incM), ...Object.keys(spendM)])].sort().slice(-12);
       const trend = months.map((m) => {
         const i = incM[m] || 0, s = spendM[m] || 0;
-        return { month: m, income: r2(i), spending: r2(s), net: r2(i - s), rate: i > 0 ? Math.round(((i - s) / i) * 100) : null };
+        return { month: m, income: round2(i), spending: round2(s), net: round2(i - s), rate: i > 0 ? Math.round(((i - s) / i) * 100) : null };
       });
       return sendJson(res, 200, {
-        income: { weekly: r2((inMonthly * 12) / 52), monthly: r2(inMonthly), yearly: r2(inMonthly * 12) },
-        expenses: { weekly: r2((spendMonthly * 12) / 52), monthly: r2(spendMonthly), yearly: r2(spendMonthly * 12) },
-        subscriptions: { monthly: r2(subsMonthly) },
-        net: { weekly: r2((net * 12) / 52), monthly: net, yearly: r2(net * 12), daily: r2((net * 12) / 365) },
+        income: { weekly: round2((inMonthly * 12) / 52), monthly: round2(inMonthly), yearly: round2(inMonthly * 12) },
+        expenses: { weekly: round2((spendMonthly * 12) / 52), monthly: round2(spendMonthly), yearly: round2(spendMonthly * 12) },
+        subscriptions: { monthly: round2(subsMonthly) },
+        net: { weekly: round2((net * 12) / 52), monthly: net, yearly: round2(net * 12), daily: round2((net * 12) / 365) },
         savingsRate: inMonthly > 0 ? Math.round((net / inMonthly) * 100) : null,
         trend,
       });

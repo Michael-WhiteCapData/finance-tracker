@@ -144,7 +144,7 @@ function summary(days = 35) {
       out30, in30, net30: round2(in30 - out30),
     },
     chargeCount: upcoming.length,
-    monthlySubTotal: round2(subs.reduce((s, x) => s + x.cost * ({ weekly: 52 / 12, biweekly: 26 / 12, monthly: 1, quarterly: 1 / 3, semiannual: 1 / 6, yearly: 1 / 12 }[x.billing_cycle] || 1), 0)),
+    monthlySubTotal: round2(subs.reduce((s, x) => s + x.cost * ({ weekly: 52 / 12, biweekly: 26 / 12, monthly: 1, quarterly: 1 / 3, semiannual: 1 / 6, yearly: 1 / 12 }[x.billing_cycle] ?? 1), 0)),
   };
 }
 
