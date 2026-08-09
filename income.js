@@ -154,6 +154,81 @@ function monthlyTotal() {
   return round2(total);
 }
 
+// Per-source pay statistics over the trailing paychecks — the basis for
+// variable-income forecasting. Pay that isn't salaried swings week to week, so
+// projecting the LAST check forward misleads; the median is the honest
+// "typical week" and the 25th percentile is the honest "lean week".
+const pct = (sorted, q) => sorted[Math.floor((sorted.length - 1) * q)];
+function sourceStats(windowCount = 12) {
+  const rows = db.prepare(
+    `SELECT name, billing_cycle, category, cost, next_billing_date FROM income
+     WHERE status = 'active' AND next_billing_date IS NOT NULL
+     ORDER BY next_billing_date DESC`
+  ).all();
+  const by = new Map();
+  for (const r of rows) {
+    const key = `${r.name}|${r.billing_cycle}`;
+    let g = by.get(key);
+    if (!g) {
+      g = { name: r.name, cycle: r.billing_cycle, category: r.category, lastDate: r.next_billing_date, lastAmount: r.cost, amounts: [] };
+      by.set(key, g);
+    }
+    if (g.amounts.length < windowCount) g.amounts.push(r.cost);
+  }
+  return [...by.values()].map((g) => {
+    const sorted = [...g.amounts].sort((a, b) => a - b);
+    return {
+      name: g.name, cycle: g.cycle, category: g.category,
+      lastDate: g.lastDate, lastAmount: round2(g.lastAmount),
+      n: sorted.length,
+      median: round2(pct(sorted, 0.5)),
+      p25: round2(pct(sorted, 0.25)),
+      min: round2(sorted[0]),
+      max: round2(sorted[sorted.length - 1]),
+    };
+  });
+}
+
+// Append bank deposits that match a known income source to the paycheck ledger.
+// Conservative on purpose: a deposit only counts when its description carries
+// the source's name keyword — transfers, refunds, and one-off deposits never
+// match. Idempotent: a paycheck already in the ledger (±2 days, same amount)
+// is skipped, so hand-entered history and re-syncs don't duplicate.
+function syncFromDeposits() {
+  const sources = db.prepare(
+    `SELECT name, billing_cycle, MAX(category) category FROM income
+     WHERE status = 'active' AND next_billing_date IS NOT NULL
+     GROUP BY name, billing_cycle`
+  ).all();
+  const deposits = db.prepare('SELECT date, description, amount FROM deposits ORDER BY date').all();
+  const dup = db.prepare(
+    `SELECT 1 FROM income WHERE name = ?
+       AND ABS(julianday(next_billing_date) - julianday(?)) <= 2
+       AND ABS(cost - ?) < 0.005`
+  );
+  let added = 0;
+  for (const s of sources) {
+    const kw = (s.name.split(/\s+/)[0] || '').toUpperCase();
+    if (kw.length < 3) continue;
+    for (const d of deposits) {
+      const desc = (d.description || '').toUpperCase();
+      if (!desc.includes(kw)) continue;
+      // A source keyword that is also the account holder's name matches P2P
+      // cashouts and refunds addressed to them — conduits/transfers/refunds
+      // are never paychecks.
+      if (/PAYPAL|VENMO|CASH ?APP|ZELLE|TRANSFER|XFER|REFUND|RETURN|REVERSAL|COINBASE/i.test(desc)) continue;
+      if (dup.get(s.name, d.date, d.amount)) continue;
+      createIncome({
+        name: s.name, cost: d.amount, billing_cycle: s.billing_cycle,
+        category: s.category || 'Payroll', next_billing_date: d.date,
+        status: 'active', notes: 'auto-captured from bank deposit',
+      });
+      added++;
+    }
+  }
+  return { added };
+}
+
 // Income received per calendar month (from paycheck dates).
 function byMonth() {
   const map = {};
@@ -208,4 +283,6 @@ module.exports = {
   monthlyTotal,
   byMonth,
   summary,
+  sourceStats,
+  syncFromDeposits,
 };

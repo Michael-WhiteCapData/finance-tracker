@@ -40,6 +40,13 @@ function build() {
         'Overdraft projected',
         `Your balance is on track to go negative around ${bal.overdraftDate} (low point ${usd(bal.lowest)}). Move money or pause a charge.`,
         { tab: 'upcoming' });
+    } else if (bal.leanOverdraftDate) {
+      // Typical weeks look fine, but a run of lean paychecks (25th pct)
+      // overdrafts — the failure mode salaried forecasts never see.
+      push('warning', `overdraft-lean:${bal.leanOverdraftDate}`,
+        'Overdraft risk on lean weeks',
+        `Typical pay covers this window, but at lean-week pay (25th percentile) you'd go negative around ${bal.leanOverdraftDate} (low point ${usd(bal.lowestLean)}). Keep a buffer or trim a charge.`,
+        { tab: 'upcoming' });
     } else if (bal.lowest != null && bal.lowest < LOW_BALANCE) {
       push('warning', `low-projected:${bal.lowestDate || ''}`,
         'Balance gets tight',

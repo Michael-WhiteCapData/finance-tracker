@@ -88,6 +88,10 @@ async function sync({ days = 120 } = {}) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'simplefin', ?)`
   );
   const exists = db.prepare('SELECT 1 FROM transactions WHERE ext_id = ?');
+  const depIns = db.prepare(
+    `INSERT OR IGNORE INTO deposits (date, source, description, amount, ext_id)
+     VALUES (?, ?, ?, ?, ?)`
+  );
   const bal = db.prepare(
     `INSERT INTO balances (account, source, balance, available, as_of, manual, updated_at)
      VALUES (?, ?, ?, ?, ?, 0, datetime('now'))
@@ -117,9 +121,18 @@ async function sync({ days = 120 } = {}) {
         const extId = `sf:${a.id}:${t.id}`;
         if (exists.get(extId)) continue;          // already synced
         const amt = Number(t.amount);
-        if (!isFinite(amt) || amt >= 0) continue;  // spending only (money out)
+        if (!isFinite(amt)) continue;
         const desc = (t.description || t.payee || t.memo || '').trim();
         const date = localDay(new Date((t.posted || t.transacted_at) * 1000));
+        // Money IN goes to the deposits table (never the spending ledger) so
+        // income auto-capture can see paychecks land. Card credits are refunds/
+        // payments, not income — skip those.
+        if (amt > 0) {
+          if (source === 'checking' || source === 'savings') {
+            depIns.run(date, source, desc, round2(amt), extId);
+          }
+          continue;
+        }
         // Inserted counted=0 here; the import pipeline's loadSimpleFin() re-derives
         // these rows as the live source of truth (counted=1, deduped against the
         // CSV/PayPal/Venmo/Cash App ledger over the range they cover). Auto-sync
@@ -132,7 +145,11 @@ async function sync({ days = 120 } = {}) {
   } catch (e) { db.exec('ROLLBACK'); throw e; }
 
   setConfig('simplefin_synced_at', new Date().toISOString());
-  return { accounts, added, syncedAt: new Date().toISOString() };
+  // Auto-capture paychecks: deposits matching a known income source append to
+  // the income ledger, so variable pay stays current without manual entry.
+  let incomeAdded = 0;
+  try { incomeAdded = require('./income').syncFromDeposits().added; } catch { /* never block a sync */ }
+  return { accounts, added, incomeAdded, syncedAt: new Date().toISOString() };
 }
 
 // Hand-adjust a balance (and its available) by a signed delta — flags it manual

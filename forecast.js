@@ -6,6 +6,7 @@
 
 const { db } = require('./db');
 const { round2 } = require('./util');
+const incomeRepo = require('./income');
 // Local-date helpers (not UTC) so "today" matches the user's calendar day and
 // date math stays consistent with the local-dated transactions.
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -70,24 +71,21 @@ function summary(days = 35) {
     }
   }
 
-  // Upcoming paychecks: project EVERY active income source at its own cadence
-  // (not a single hardcoded-weekly source). Grouping by (name, billing_cycle)
-  // keeps two distinct jobs separate; using addCycle respects biweekly/monthly
-  // pay so the projected balance — and the overdraft warning — is accurate.
+  // Upcoming paychecks: project EVERY active income source at its own cadence.
+  // Pay isn't salaried — checks vary week to week — so each source projects at
+  // its MEDIAN recent paycheck (the typical week), and carries its 25th
+  // percentile so the balance line can also be run lean-week (the honest
+  // overdraft warning for variable income).
   const income = [];
-  const paySources = db.prepare(
-    `SELECT name, billing_cycle, cost, MAX(next_billing_date) d FROM income
-     WHERE status = 'active' AND next_billing_date IS NOT NULL
-     GROUP BY name, billing_cycle`
-  ).all();
+  const paySources = incomeRepo.sourceStats();
   for (const p of paySources) {
-    let next = parse(p.d);
+    let next = parse(p.lastDate);
     let adv = 0;
-    while (next <= today && adv++ < 5000) next = addCycle(next, p.billing_cycle);
+    while (next <= today && adv++ < 5000) next = addCycle(next, p.cycle);
     let col = 0;
     while (next <= end && col++ < 60) {
-      income.push({ date: iso(next), name: p.name, amount: round2(p.cost), kind: 'income' });
-      next = addCycle(next, p.billing_cycle);
+      income.push({ date: iso(next), name: p.name, amount: p.median, lean: p.p25, kind: 'income' });
+      next = addCycle(next, p.cycle);
     }
   }
 
@@ -104,15 +102,22 @@ function summary(days = 35) {
   const startingBalance = hasBalances ? round2(liquid.reduce((s, b) => s + (b.available ?? b.balance), 0)) : null;
   const cardRow = balRows.find((b) => b.source === 'creditcard');
 
-  // Project the running balance to find the low point (and overdraft date, if any).
+  // Project the running balance to find the low point (and overdraft date, if
+  // any) — twice: at typical (median) income, and at lean-week (p25) income.
+  // Variable pay means the typical view can look safe while a run of lean
+  // weeks still overdrafts; both views are surfaced.
   let lowest = startingBalance, lowestDate = null, overdraftDate = null;
+  let lowestLean = startingBalance, leanOverdraftDate = null;
   if (hasBalances) {
-    let run = startingBalance;
+    let run = startingBalance, runLean = startingBalance;
     const merged = [...upcoming, ...income].sort((a, b) => a.date.localeCompare(b.date));
     for (const e of merged) {
       run += e.kind === 'income' ? e.amount : -e.amount;
+      runLean += e.kind === 'income' ? (e.lean ?? e.amount) : -e.amount;
       if (run < lowest) { lowest = round2(run); lowestDate = e.date; }
       if (run < 0 && !overdraftDate) overdraftDate = e.date;
+      if (runLean < lowestLean) lowestLean = round2(runLean);
+      if (runLean < 0 && !leanOverdraftDate) leanOverdraftDate = e.date;
     }
   }
 
@@ -138,6 +143,12 @@ function summary(days = 35) {
       lowest: hasBalances ? round2(lowest) : null,
       lowestDate,
       overdraftDate,
+      lowestLean: hasBalances ? round2(lowestLean) : null,
+      leanOverdraftDate,
+    },
+    incomeBasis: {
+      method: 'median of recent paychecks (lean view: 25th percentile)',
+      sources: paySources,
     },
     totals: {
       out14, in14, net14: round2(in14 - out14),

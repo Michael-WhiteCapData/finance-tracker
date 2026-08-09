@@ -113,6 +113,20 @@ db.exec(`
   );
 `);
 
+// Bank deposits (money IN) from the live feed — kept separate from the
+// spending ledger so income capture can never pollute spending math. Feeds
+// income auto-capture (paychecks) and stays for future income analytics.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS deposits (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    date        TEXT    NOT NULL,
+    source      TEXT    NOT NULL,
+    description TEXT,
+    amount      REAL    NOT NULL,
+    ext_id      TEXT    UNIQUE
+  );
+`);
+
 // Manual category fixes, keyed by merchant — re-applied on every import so a
 // correction sticks forever and fixes every transaction from that merchant.
 db.exec(`

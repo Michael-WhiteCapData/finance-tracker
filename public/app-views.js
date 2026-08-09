@@ -330,9 +330,17 @@ async function refreshUpcoming() {
     lead = bal.overdraftDate
       ? `⚠ Heads up — your balance is projected to go negative around <b>${fmtDate(bal.overdraftDate)}</b> (low point ${usd(bal.lowest)}). That's overdraft territory. `
       : `✓ You stay positive through this window — lowest point ${usd(bal.lowest)}${bal.lowestDate ? ` around ${fmtDate(bal.lowestDate)}` : ''}. Running column is your real projected balance. `;
+    if (!bal.overdraftDate && bal.lowestLean != null && bal.lowestLean !== bal.lowest) {
+      lead += bal.leanOverdraftDate
+        ? `⚠ On lean paychecks (25th pct) you'd dip negative around <b>${fmtDate(bal.leanOverdraftDate)}</b> (${usd(bal.lowestLean)}). `
+        : `Lean-week view (25th pct pay): lowest ${usd(bal.lowestLean)}. `;
+    }
   } else {
     lead = 'Running total is the swing from today (starts at $0), not your actual balance — connect a bank for real balance tracking. ';
   }
-  $('#upNote').innerHTML = lead + 'Dates are projected from each item’s last charge + its cycle.' + undated;
+  const basis = (f.incomeBasis && f.incomeBasis.sources && f.incomeBasis.sources.length)
+    ? ' Income is variable — projected at each source’s typical (median) recent paycheck.'
+    : '';
+  $('#upNote').innerHTML = lead + 'Dates are projected from each item’s last charge + its cycle.' + basis + undated;
 }
 
