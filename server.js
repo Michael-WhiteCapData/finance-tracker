@@ -247,7 +247,7 @@ async function handleApi(req, res, url) {
         for (const k of ['checking_match', 'savings_match']) {
           if (body[k]) { try { new RegExp(String(body[k]), 'i'); } catch { return sendJson(res, 400, { error: `${k}: invalid pattern` }); } }
         }
-        for (const k of ['owner_names', 'checking_match', 'savings_match']) {
+        for (const k of ['owner_names', 'checking_match', 'savings_match', 'own_accounts']) {
           if (body[k] !== undefined) profile.set(k, String(body[k]).slice(0, 300));
         }
         // re-apply to the ledger so changes take effect immediately

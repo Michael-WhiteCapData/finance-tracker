@@ -30,14 +30,21 @@ function selfRegex() {
 const checkingMatch = () => new RegExp(get('checking_match', 'check|chk'), 'i');
 const savingsMatch = () => new RegExp(get('savings_match', 'sav'), 'i');
 
+// Last-4s of the user's OWN accounts (comma-separated). Lets the importer tell
+// an internal shuffle ("TRANSFER TO X2222" — my savings) from money actually
+// leaving ("TRANSFER TO X9999" — someone else's account, e.g. rent). Empty =
+// legacy behavior: every transfer is treated as internal.
+const ownAccounts = () => new Set(get('own_accounts', '').split(',').map((s) => s.trim()).filter(Boolean));
+
 // Current raw settings (for the Settings UI). Empty string = using defaults.
 function all() {
   return {
     owner_names: get('owner_names', ''),
     checking_match: get('checking_match', ''),
     savings_match: get('savings_match', ''),
+    own_accounts: get('own_accounts', ''),
     defaults: { checking_match: 'check|chk', savings_match: 'sav' },
   };
 }
 
-module.exports = { get, set, all, selfRegex, checkingMatch, savingsMatch };
+module.exports = { get, set, all, selfRegex, checkingMatch, savingsMatch, ownAccounts };

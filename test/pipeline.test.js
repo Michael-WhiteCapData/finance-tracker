@@ -48,4 +48,33 @@ test('a SimpleFIN-only user gets counted spending after import (no CSVs)', () =>
   assert.ok(spending.summary().byCategory.some((c) => c.category === 'Food & Dining'));
 });
 
+test('transfers to a NON-own account count as spending (rent leaves as a "transfer")', () => {
+  const profile = require('../profile');
+  db.exec('DELETE FROM transactions');
+  profile.set('own_accounts', '1111,2222');
+  seedSimpleFin([
+    { date: '2026-08-03', desc: 'TRANSFER FROM X1111 TO X2222', amount: 400 },  // my checking → my savings
+    { date: '2026-08-05', desc: 'TRANSFER FROM X2222 TO X9999', amount: 500 },  // my savings → landlord: RENT
+    { date: '2026-08-06', desc: 'ONLINE TRANSFER TO SAVINGS', amount: 50 },     // no target digits → internal
+  ]);
+  importSpending.run();
+
+  const byDesc = Object.fromEntries(
+    db.prepare("SELECT description, counted, category FROM transactions WHERE origin='simplefin'").all()
+      .map((r) => [r.description, r])
+  );
+  assert.equal(byDesc['TRANSFER FROM X1111 TO X2222'].counted, 0, 'own-account shuffle excluded');
+  assert.equal(byDesc['TRANSFER FROM X2222 TO X9999'].counted, 1, 'external transfer is real spending');
+  assert.equal(byDesc['TRANSFER FROM X2222 TO X9999'].category, 'P2P / People');
+  const rentRow = db.prepare("SELECT merchant FROM transactions WHERE description LIKE '%X9999%'").get();
+  assert.equal(rentRow.merchant, 'TRANSFER TO X9999', 'target account becomes the merchant');
+  assert.equal(byDesc['ONLINE TRANSFER TO SAVINGS'].counted, 0);
+
+  // Without own_accounts configured, legacy behavior: everything excluded.
+  profile.set('own_accounts', '');
+  importSpending.run();
+  const legacy = db.prepare("SELECT counted FROM transactions WHERE description LIKE '%X9999%'").get();
+  assert.equal(legacy.counted, 0);
+});
+
 after(() => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} });

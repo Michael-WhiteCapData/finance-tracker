@@ -36,6 +36,29 @@ function parseCsv(text) {
 const toNum = (s) => parseFloat(String(s).replace(/[^0-9.\-]/g, '')) || 0;
 const tx = []; // { date, source, description, merchant, amount(+out), category, counted, note }
 
+const TRANSFER_RE = /transfer (from|to) (savings|checking|x?-?\d{3,4})|online transfer|credit card (payment|pmt)|web pmt|bank transfer/i;
+
+// Internal transfer (my checking ↔ my savings: not spending) vs EXTERNAL
+// transfer (my account → someone else's, e.g. rent: real spending). Requires
+// profile.own_accounts (last-4 list) to tell them apart — without it, every
+// transfer is treated as internal (legacy behavior).
+function isInternalTransfer(desc) {
+  if (!TRANSFER_RE.test(desc)) return false;
+  const own = profile.ownAccounts();
+  if (!own.size) return true;
+  const m = String(desc).match(/to x?-?(\d{3,4})/i);
+  if (!m) return true;              // no target account visible — assume internal
+  return own.has(m[1]);
+}
+
+// External transfers get the TARGET account as their merchant ("TRANSFER TO
+// X9999") so each destination — the landlord, a friend — is its own merchant
+// and category overrides land on the right one.
+function externalTransferMerchant(desc) {
+  const m = String(desc).match(/to (x?-?\d{3,4})/i);
+  return m ? `TRANSFER TO ${m[1].toUpperCase()}` : 'TRANSFER (EXTERNAL)';
+}
+
 // Newest import/*.csv whose name matches a pattern — so a fresh monthly export
 // just needs to be dropped in (filename date-stamps change every export).
 function newestCsv(re) {
@@ -57,11 +80,12 @@ function loadBank(pattern, source) {
     const date = r[1], desc = (r[2] || '').trim(), dir = (r[4] || '').toLowerCase(), amt = toNum(r[5]);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/debit/.test(dir) || amt <= 0) continue;
     // Internal transfers between your own accounts and card payments aren't spending.
-    const isTransfer = /transfer (from|to) (savings|checking|x?-?\d{3,4})|online transfer|credit card (payment|pmt)|web pmt|bank transfer/i.test(desc);
+    const isTransfer = isInternalTransfer(desc);
+    const external = !isTransfer && TRANSFER_RE.test(desc); // money leaving to someone else's account
     const isConduit = /paypal|venmo|cash ?app/i.test(desc);
     tx.push({
-      date, source, description: desc, merchant: merchant(desc), amount: amt,
-      category: isTransfer ? 'Transfer' : categorize(desc),
+      date, source, description: desc, merchant: external ? externalTransferMerchant(desc) : merchant(desc), amount: amt,
+      category: isTransfer ? 'Transfer' : external ? 'P2P / People' : categorize(desc),
       counted: isTransfer ? 0 : 1,
       conduit: isConduit ? (/paypal/i.test(desc) ? 'paypal' : /venmo/i.test(desc) ? 'venmo' : 'cashapp') : null,
       note: null,
@@ -263,11 +287,12 @@ function loadSimpleFin() {
   let min = null, max = null;
   for (const r of rows) {
     const desc = r.description || '';
-    const isTransfer = /transfer (from|to) (savings|checking|x?-?\d{3,4})|online transfer|credit card (payment|pmt)|web pmt|bank transfer/i.test(desc);
+    const isTransfer = isInternalTransfer(desc);
+    const external = !isTransfer && TRANSFER_RE.test(desc);
     const isConduit = /paypal|venmo|cash ?app/i.test(desc);
     tx.push({
-      date: r.date, source: r.source, description: desc, merchant: merchant(desc), amount: r.amount,
-      category: isTransfer ? 'Transfer' : categorize(desc),
+      date: r.date, source: r.source, description: desc, merchant: external ? externalTransferMerchant(desc) : merchant(desc), amount: r.amount,
+      category: isTransfer ? 'Transfer' : external ? 'P2P / People' : categorize(desc),
       counted: isTransfer ? 0 : 1,
       conduit: isConduit ? (/paypal/i.test(desc) ? 'paypal' : /venmo/i.test(desc) ? 'venmo' : 'cashapp') : null,
       note: 'SimpleFIN (live)', sf: true, ext_id: r.ext_id,
