@@ -9,6 +9,7 @@ const { db } = require('./db');
 const forecast = require('./forecast');
 const month = require('./month');
 const detect = require('./detect');
+const reconcile = require('./reconcile');
 
 const { round2 } = require('./util');
 const usd = (n) => `$${(round2(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -75,6 +76,33 @@ function build() {
         `${c.category} over budget`,
         `On pace for ${usd(c.projected)} vs your ${usd(c.budget)} budget (so far ${usd(c.total)}).`,
         { tab: 'month' });
+    }
+  }
+
+  // --- Subscription ↔ ledger reconciliation: rebills + stale subs ---
+  let rec = null;
+  try { rec = reconcile.report(); } catch { /* ignore */ }
+  if (rec) {
+    for (const rb of rec.rebills) {
+      const last = rb.charges[rb.charges.length - 1];
+      // Id carries the last charge date so a fresh rebill re-surfaces after a dismissal.
+      push('critical', `rebill:${rb.name}:${last.date}`,
+        `Cancelled sub charged again`,
+        `${rb.name} was cancelled ${rb.cancelDate} but a matching charge (${usd(last.amount)}) landed ${last.date}. Check the autopay and dispute if needed.`,
+        { tab: 'subscriptions' });
+    }
+    for (const d of rec.doubles) {
+      push('warning', `double:${d.name}:${d.dates[d.dates.length - 1]}`,
+        `${d.name} billed ${d.dates.length}× in close succession`,
+        `${usd(d.amount)} charges on ${d.dates.join(', ')} — closer than its cycle allows. Duplicate charge or overlapping subs; check the vendor account.`,
+        { tab: 'subscriptions' });
+    }
+    for (const s of rec.subs) {
+      if (!s.stale) continue;
+      push('warning', `stale-sub:${s.name}`,
+        `${s.name} may have lapsed or moved`,
+        `No matching charge since ${s.lastCharge.date} (${s.cycle} sub). Verify it still bills — then update or cancel it here.`,
+        { tab: 'subscriptions' });
     }
   }
 

@@ -33,3 +33,5 @@ video/
 
 # Personal/local categorizer overrides (regional merchants)
 categorize.local.js
+# Personal/local reconcile keywords (vendors that reveal personal history)
+reconcile.local.js

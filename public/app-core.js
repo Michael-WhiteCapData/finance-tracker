@@ -91,6 +91,7 @@ async function refresh() {
   renderBreakdown(sum);
   renderList(subs);
   renderSuggestions();
+  renderReconcile();
   $('#subsSubtitle').textContent =
     sum.counts.active > 0
       ? `${sum.counts.active} active · ${usd(sum.monthly)}/mo · ${usd(sum.yearly)}/yr`

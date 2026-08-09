@@ -67,6 +67,7 @@ Re-applies `category_overrides` so manual fixes survive. Idempotent (DELETE + re
 - **Balance-aware forecast** — the overdraft forecast uses the live `balances` table, not just pace.
 - **Alerts feed** (`alerts.js`, `/api/alerts`) — global severity-ranked bar: overdraft, low/tight balance, over-budget categories, large charges in the next 7 days, untracked recurring charges, monthly fee leaks. Dismissible (localStorage) + opt-in desktop notifications for criticals.
 - **Budgets, activated** — `budgets.suggest()` (`GET /api/budgets/suggest`) seeds per-category limits from the last 3 months' average in one click, lighting up the pace/over-budget UI and the budget alerts.
+- **Subscription ↔ ledger reconciliation** (`reconcile.js`, 2026-08-09) — `GET /api/reconcile` reports what the ledger says the subs table has wrong (cost drift, next dates, stale subs, cancelled-sub rebills, double charges, unknown recurring PayPal amounts); `POST /api/reconcile/apply` writes dates + drifted costs back. Matching is a UNION of description-keyword rows and opaque `PAYPAL WEB` amount matches (± $0.15) — never fall back from one to the other, or subs go falsely stale when itemized PayPal imports stop. Amount-matched rows can date a sub but never re-price it (circular). Rebills and doubles feed the alert bar; the Subscriptions tab shows a "Ledger check" card with one-click apply.
 
 ### Balances: available vs posted (important)
 The `balances` table stores both `balance` (posted) and `available` (after pending

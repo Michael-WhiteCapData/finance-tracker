@@ -176,6 +176,56 @@ async function renderSuggestions() {
   });
 }
 
+// ---------- Subscription ↔ ledger reconciliation ----------
+// Shows what the ledger says the subs table has wrong: rebills of cancelled
+// subs (critical), stale subs, and pending cost/date corrections — with a
+// one-click apply so the table never rots the way a manual list does.
+async function renderReconcile() {
+  const el = $('#subReconcile');
+  if (!el) return;
+  let r = null;
+  try { r = await (await fetch('/api/reconcile')).json(); } catch { return; }
+  const drifted = r.subs.filter((s) => s.costDrift);
+  const dated = r.subs.filter((s) => s.lastCharge && s.suggestedNext !== s.currentNext);
+  const stale = r.subs.filter((s) => s.stale);
+  if (!r.rebills.length && !r.doubles.length && !drifted.length && !dated.length && !stale.length && !r.unknownRecurring.length) {
+    el.innerHTML = '';
+    return;
+  }
+  const row = (name, meta, bad) => `
+    <div class="suggest-row">
+      <span class="sg-name">${bad ? '⚠ ' : ''}${escapeHtml(name)}</span>
+      <span class="sg-meta">${escapeHtml(meta)}</span>
+    </div>`;
+  const parts = [];
+  for (const rb of r.rebills) {
+    const last = rb.charges[rb.charges.length - 1];
+    parts.push(row(rb.name, `cancelled ${rb.cancelDate}, but charged ${usd(last.amount)} on ${fmtDate(last.date)} — check the autopay`, true));
+  }
+  for (const d of r.doubles) parts.push(row(d.name, `charged ${usd(d.amount)} twice in one cycle (${fmtDate(d.dates[0])} + ${fmtDate(d.dates[1])}) — duplicate or overlapping subs`, true));
+  for (const s of stale) parts.push(row(s.name, `no charge since ${fmtDate(s.lastCharge.date)} — lapsed or moved cards?`, true));
+  for (const s of drifted) parts.push(row(s.name, `bank says ${usd(s.observedCost)}, tracked as ${usd(s.cost)}`));
+  for (const u of r.unknownRecurring) parts.push(row(`Unknown PayPal autopay`, `${usd(u.amount)} seen ${u.count}× (${fmtDate(u.firstDate)}–${fmtDate(u.lastDate)}) — matches no tracked sub`, true));
+  const applyable = drifted.length + dated.length;
+  el.innerHTML = `
+    <div class="suggest-card reconcile-card">
+      <div class="suggest-head"><span class="suggest-icon">⇄</span> Ledger check
+        ${applyable ? `<button class="btn btn-primary" id="recApply" style="margin-left:auto;">Apply ${applyable} correction${applyable === 1 ? '' : 's'}</button>` : ''}
+      </div>
+      <div class="suggest-list">${parts.join('')}
+        ${dated.length && !drifted.length ? row(`${dated.length} next-charge date${dated.length === 1 ? '' : 's'}`, 'refreshed from the latest charges on apply') : ''}
+      </div>
+    </div>`;
+  const btn = $('#recApply');
+  if (btn) btn.addEventListener('click', async () => {
+    try {
+      const res = await (await fetch('/api/reconcile/apply', { method: 'POST' })).json();
+      toast(`Updated ${res.changes.length} subscription${res.changes.length === 1 ? '' : 's'} from the ledger`, 'success');
+      await refresh();
+    } catch (e) { toast(e.message, 'error'); }
+  });
+}
+
 // ---------- Insights ----------
 async function refreshInsights() {
   const [d, nw] = await Promise.all([

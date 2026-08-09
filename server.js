@@ -16,6 +16,7 @@ const forecast = require('./forecast');
 const simplefin = require('./simplefin');
 const detect = require('./detect');
 const alerts = require('./alerts');
+const reconcile = require('./reconcile');
 const profile = require('./profile');
 const goals = require('./goals');
 const accounts = require('./accounts');
@@ -193,6 +194,15 @@ async function handleApi(req, res, url) {
 
     if (resource === 'detect-subscriptions' && req.method === 'GET') {
       return sendJson(res, 200, detect.suggestions());
+    }
+
+    // Subscription ↔ ledger reconciliation: GET = report, POST /apply = write
+    // the ledger's truth (next dates + drifted costs) back to the subs table.
+    if (resource === 'reconcile') {
+      if (req.method === 'GET') return sendJson(res, 200, reconcile.report());
+      if (req.method === 'POST' && parts[2] === 'apply') {
+        return sendJson(res, 200, { changes: reconcile.apply() });
+      }
     }
 
     if (resource === 'goals') {

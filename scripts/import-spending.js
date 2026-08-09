@@ -103,6 +103,75 @@ function loadPaypal() {
   }
 }
 
+// ---------- PayPal (activity CSV — the two-click export) ----------
+// paypal.com → Activity → Download → CSV. Much easier to fetch monthly than the
+// PDF statements the .txt path decodes, so this is the maintained route.
+// Parsed by header name (PayPal shuffles columns between export flavors).
+function loadPaypalCsv() {
+  const dir = path.join(IMPORT, 'paypal');
+  if (!fs.existsSync(dir)) return;
+  const files = [];
+  const collect = (d) => {
+    for (const f of fs.readdirSync(d)) {
+      const p = path.join(d, f);
+      if (fs.statSync(p).isDirectory()) collect(p);
+      else if (f.toLowerCase().endsWith('.csv')) files.push(p);
+    }
+  };
+  collect(dir);
+  if (!files.length) return;
+
+  // Rows the .txt statements already loaded — a CSV covering the same period
+  // must not double-count them.
+  const seen = new Set(tx.filter((t) => t.source === 'paypal').map((t) => `${t.date}|${t.amount}`));
+
+  for (const f of files) {
+    // Real exports open with a UTF-8 BOM — strip it or the Date header is missed.
+    const rows = parseCsv(fs.readFileSync(f, 'utf8').replace(/^﻿/, ''));
+    if (rows.length < 2) continue;
+    const head = rows[0].map((h) => h.trim().toLowerCase());
+    const col = (name) => head.indexOf(name);
+    const iDate = col('date'), iName = col('name'), iType = col('type'), iStatus = col('status'), iAmt = col('amount');
+    if (iDate < 0 || iAmt < 0) continue; // not a PayPal activity export
+
+    const loaded = [];   // rows from THIS file, so refunds can net them out
+    const refunds = [];  // positive refund/reversal rows
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const m = String(r[iDate] || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (!m) continue;
+      const amt = toNum(r[iAmt]);
+      const type = iType >= 0 ? String(r[iType]) : '';
+      const date = `${m[3]}-${m[1]}-${m[2]}`;
+      if (amt > 0 && /refund|reversal/i.test(type)) { refunds.push({ date, amount: amt }); continue; }
+      if (amt >= 0) continue; // only money out
+      // An authorization is a hold, not a payment — its capture row is the spend.
+      if (/authorization|^order$/i.test(type)) continue;
+      if (/card deposit|bank deposit|transfer|withdraw|currency conversion/i.test(type)) continue;
+      if (iStatus >= 0 && r[iStatus] && !/complete/i.test(r[iStatus])) continue;
+      const name = iName >= 0 ? String(r[iName] || '').trim() : '';
+      const key = `${date}|${Math.abs(amt)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      loaded.push({
+        date, source: 'paypal', description: name || type,
+        merchant: merchant(name || type), amount: Math.abs(amt), category: categorize(name || type),
+        counted: 1, conduit: null, note: 'PayPal', platform: 'paypal',
+      });
+    }
+    // Net out refunded purchases: each refund cancels the nearest matching-amount
+    // purchase within the prior 45 days — refunded money isn't spend.
+    for (const rf of refunds) {
+      const cand = loaded
+        .filter((t) => Math.abs(t.amount - rf.amount) < 0.005 && t.date <= rf.date)
+        .filter((t) => (new Date(rf.date) - new Date(t.date)) / 86400000 <= 45)
+        .sort((a, b) => b.date.localeCompare(a.date))[0];
+      if (cand) loaded.splice(loaded.indexOf(cand), 1);
+    }
+    tx.push(...loaded);
+  }
+}
+
 // ---------- Venmo ----------
 function loadVenmo() {
   const dir = path.join(IMPORT, 'venmo');
@@ -163,12 +232,21 @@ function dedupe() {
   const used = new Set();
   for (const item of tx) {
     if (!item.platform) continue; // only platform-sourced payments
-    const cand = bankConduits.find((b, idx) =>
-      !used.has(idx) && b.conduit === item.platform &&
-      Math.abs(b.amount - item.amount) < 0.005 &&
-      Math.abs(new Date(b.date) - new Date(item.date)) / 86400000 <= 5
-    );
-    if (cand) { const idx = bankConduits.indexOf(cand); used.add(idx); cand.counted = 0; cand.note = `funds ${item.platform} payment (deduped)`; }
+    // A funding line FOLLOWS its platform charge (typically 1–4 days), so prefer
+    // the nearest line on/after the charge date; a line up to 1 day before is a
+    // last-resort fallback (date skew between sources). Greedy first-match let a
+    // later charge steal an earlier charge's funding line in same-amount clusters.
+    let best = -1, bestScore = Infinity;
+    for (let idx = 0; idx < bankConduits.length; idx++) {
+      const b = bankConduits[idx];
+      if (used.has(idx) || b.conduit !== item.platform) continue;
+      if (Math.abs(b.amount - item.amount) >= 0.005) continue;
+      const delta = (new Date(b.date) - new Date(item.date)) / 86400000;
+      if (delta < -1 || delta > 5) continue;
+      const score = delta >= 0 ? delta : 100 - delta; // following lines first, closest first
+      if (score < bestScore) { bestScore = score; best = idx; }
+    }
+    if (best >= 0) { used.add(best); bankConduits[best].counted = 0; bankConduits[best].note = `funds ${item.platform} payment (deduped)`; }
   }
 }
 
@@ -205,6 +283,7 @@ function run() {
   loadBank(profile.checkingMatch(), 'checking');
   loadBank(profile.savingsMatch(), 'savings');
   loadPaypal();
+  loadPaypalCsv();
   loadVenmo();
   loadCashApp();
 

@@ -498,6 +498,8 @@ h1 { letter-spacing: -0.03em; font-weight: 720; }
 
 .suggest-card { background: oklch(74% 0.14 235 / 0.07); border: 1px solid oklch(74% 0.14 235 / 0.35); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 20px; animation: cardIn 0.5s var(--ease) both; }
 .suggest-head { font-size: 0.92rem; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+/* Reconcile variant: warm tint — it reports problems, not discoveries. */
+.reconcile-card { background: oklch(80% 0.13 85 / 0.07); border-color: oklch(80% 0.13 85 / 0.35); }
 .suggest-icon { font-size: 1.05rem; }
 .suggest-row { display: grid; grid-template-columns: 1.4fr 1.6fr auto auto; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line-soft); }
 .sg-name { font-weight: 600; }
